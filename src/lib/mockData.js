@@ -806,3 +806,161 @@ export const doctors = new Proxy([], {
     return Reflect.getOwnPropertyDescriptor(getDoctorsList(), prop);
   }
 });
+
+// --- API Gateway Integration ---
+import { apiRequest } from "./api";
+
+export async function apiLoginDoctor(email, password) {
+  const mockUid = "okta_doc_456";
+  const session = { userId: mockUid, email: email.toLowerCase(), role: "DOCTOR" };
+  window.localStorage.setItem(CURRENT_USER_KEY, JSON.stringify({ profile: { name: "Doctor User", email }, ...session }));
+
+  try {
+    const profile = await apiRequest("/api/v1/doctors/profile", "GET", null, "DOCTOR");
+    const completeDoctor = {
+      name: profile.name,
+      specialty: profile.specialty,
+      email: email.toLowerCase(),
+      phone: profile.phone,
+      registrationNumber: profile.registrationNumber,
+      university: profile.university,
+      experience: profile.experienceYears,
+      about: profile.bio,
+      id: profile.id.toString(),
+      verificationStatus: "APPROVED",
+      initials: profile.name.replace("Dr. ", "").split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
+    };
+    window.localStorage.setItem("palscare-current-doctor", JSON.stringify(completeDoctor));
+    return { success: true, doctor: completeDoctor };
+  } catch (e) {
+    return { success: false, message: "Doctor profile not found in database. Please Register first." };
+  }
+}
+
+export async function apiGetDoctorAppointments() {
+  return await apiRequest("/api/v1/patients/appointments/doctor", "GET", null, "DOCTOR");
+}
+
+export async function apiUpdateDoctorProfile(doctorData) {
+  const updated = await apiRequest("/api/v1/doctors/onboarding", "POST", {
+    name: doctorData.name,
+    specialty: doctorData.specialty,
+    registrationNumber: doctorData.registrationNumber,
+    university: doctorData.university,
+    experienceYears: parseInt(doctorData.experience, 10) || 1,
+    bio: doctorData.about
+  }, "DOCTOR");
+
+  const completeDoctor = {
+    name: updated.name,
+    specialty: updated.specialty,
+    registrationNumber: updated.registrationNumber,
+    university: updated.university,
+    experience: updated.experienceYears,
+    about: updated.bio,
+    phone: doctorData.phone || "",
+    id: updated.id.toString(),
+    verificationStatus: "APPROVED",
+    initials: updated.name.replace("Dr. ", "").split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
+  };
+  window.localStorage.setItem("palscare-current-doctor", JSON.stringify(completeDoctor));
+  return completeDoctor;
+}
+
+export async function apiRegisterDoctor(doctorData) {
+  const mockUid = "okta_doc_" + Math.random().toString(36).substr(2, 9);
+  const session = { userId: mockUid, email: doctorData.email.toLowerCase(), role: "DOCTOR" };
+  window.localStorage.setItem(CURRENT_USER_KEY, JSON.stringify({ profile: doctorData, ...session }));
+
+  // Call Gateway User Registration
+  await apiRequest("/api/v1/auth/register", "POST", { userType: "DOCTOR" }, "DOCTOR");
+
+  // Save Doctor Onboarding Info
+  const onboarded = await apiRequest("/api/v1/doctors/onboarding", "POST", {
+    name: doctorData.name,
+    specialty: doctorData.specialty,
+    registrationNumber: doctorData.registrationNumber,
+    university: doctorData.university,
+    experienceYears: doctorData.experience,
+    bio: doctorData.about
+  }, "DOCTOR");
+
+  // Retrieve Doctor ID Resolver (checks database ID)
+  let resolvedId = 1;
+  try {
+    const internalId = await apiRequest("/api/v1/doctors/internal/id", "GET", null, "DOCTOR");
+    resolvedId = internalId || 1;
+  } catch (e) {
+    console.error("Failed to resolve doctor database ID, default to 1", e);
+  }
+
+  const completeDoctor = {
+    ...doctorData,
+    id: resolvedId.toString(),
+    verificationStatus: "APPROVED",
+    initials: doctorData.name.replace("Dr. ", "").split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
+  };
+
+  window.localStorage.setItem("palscare-current-doctor", JSON.stringify(completeDoctor));
+  return { success: true, doctor: completeDoctor };
+}
+
+export async function apiGetCurrentDoctor() {
+  try {
+    const profile = await apiRequest("/api/v1/doctors/profile", "GET", null, "DOCTOR");
+    const currentLocal = JSON.parse(window.localStorage.getItem("palscare-current-doctor") || "{}");
+    const updated = {
+      ...currentLocal,
+      name: profile.name,
+      specialty: profile.specialty,
+      registrationNumber: profile.registrationNumber,
+      university: profile.university,
+      experience: profile.experienceYears,
+      about: profile.bio
+    };
+    window.localStorage.setItem("palscare-current-doctor", JSON.stringify(updated));
+    return updated;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function apiGetChambers() {
+  return await apiRequest("/api/v1/doctors/chambers", "GET", null, "DOCTOR");
+}
+
+export async function apiAddChamber(name, address) {
+  return await apiRequest("/api/v1/doctors/chambers", "POST", { name, address }, "DOCTOR");
+}
+
+export async function apiGetDoctorSlots() {
+  return await apiRequest("/api/v1/doctors/slots", "GET", null, "DOCTOR");
+}
+
+export async function apiAddDoctorSlot(day, startTime, mode, chamberId) {
+  // Format time (e.g. "09:00 AM" to "09:00:00")
+  const match = startTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  let timeStr = "09:00:00";
+  if (match) {
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const meridiem = match[3].toUpperCase();
+    if (meridiem === "PM" && hours !== 12) {
+      hours += 12;
+    } else if (meridiem === "AM" && hours === 12) {
+      hours = 0;
+    }
+    timeStr = `${String(hours).padStart(2, '0')}:${minutes}:00`;
+  }
+
+  return await apiRequest("/api/v1/doctors/slots/generate", "POST", {
+    slotDay: day,
+    startTime: timeStr,
+    slotMode: mode.toUpperCase(),
+    chamberId: mode.toUpperCase() === "CHAMBER" ? (chamberId || 1) : null
+  }, "DOCTOR");
+}
+
+export async function apiRemoveDoctorSlot(slotId) {
+  return await apiRequest(`/api/v1/doctors/slots/${slotId}`, "DELETE", null, "DOCTOR");
+}
