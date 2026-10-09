@@ -1,150 +1,204 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Lock, Mail, User, ShieldCheck, Stethoscope } from "lucide-react";
-import { registerUser, apiRegisterDoctor, apiLoginDoctor } from "@/lib/mockData";
+import { Eye, EyeOff, Lock, Mail, User, Phone, Stethoscope, Sparkles } from "lucide-react";
+import { apiLoginDoctor, apiRegisterDoctor, getCurrentDoctor } from "@/lib/mockData";
 import { toast } from "sonner";
 
 export default function DoctorLogin() {
   const [isLogin, setIsLogin] = useState(true);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [identifier, setIdentifier] = useState("dr.amara.patel@palscare.com");
+  const [password, setPassword] = useState("password123");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const navigate = useNavigate();
+
+  const handleQuickDemo = () => {
+    setIsLoading(true);
+    localStorage.removeItem("palscare-doctor-logged-out");
+    apiLoginDoctor("dr.amara.patel@palscare.com", "password123");
+    setTimeout(() => {
+      setIsLoading(false);
+      const doc = getCurrentDoctor();
+      toast.success(`Welcome back, ${doc.name}!`, {
+        description: "Logged in to Physician Portal.",
+      });
+      navigate("/doctor/portal");
+    }, 400);
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!email || !password || (!isLogin && !name)) {
-      toast.error("Please fill in all required fields.");
-      return;
+
+    if (isLogin) {
+      if (!identifier) {
+        toast.error("Please fill in your email or phone.");
+        return;
+      }
+    } else {
+      if (!name || !email) {
+        toast.error("Name and Email are required for registration.");
+        return;
+      }
     }
 
     setIsLoading(true);
-    
-    // Simulate brief network delay
+    localStorage.removeItem("palscare-doctor-logged-out");
+
     setTimeout(() => {
+      setIsLoading(false);
       if (isLogin) {
-        apiLoginDoctor(email, password)
-          .then((res) => {
-            setIsLoading(false);
-            if (res.success) {
-              toast.success("Welcome back, Dr. " + res.doctor.name.replace("Dr. ", "") + "!", {
-                description: "Successfully logged in to your Palscare Doctor Portal."
-              });
-              navigate("/doctor/portal");
-            } else {
-              // Redirect to onboarding if they successfully logged in but have no profile
-              toast.info("Please complete onboarding profile setup first.");
-              navigate("/doctor/onboarding");
-            }
-          })
-          .catch((err) => {
-            setIsLoading(false);
-            toast.error("Doctor profile not found in database. Please Register first.");
-            console.error(err);
-          });
+        apiLoginDoctor(identifier, password);
+        const doc = getCurrentDoctor();
+        toast.success(`Welcome back, ${doc.name}!`);
+        navigate("/doctor/portal");
       } else {
-        const res = registerUser(name, email, password);
-        setIsLoading(false);
-        if (res.success) {
-          toast.success("Account created!", {
-            description: "Welcome to Palscare. Let's finish your clinical onboarding."
-          });
-          navigate("/doctor/onboarding");
-        } else {
-          toast.error(res.message || "Failed to register.");
-        }
+        apiRegisterDoctor({
+          name: name.startsWith("Dr. ") ? name : `Dr. ${name}`,
+          email,
+          phone,
+          specialty: "General Practice",
+          experienceYears: 5,
+          registrationNumber: "MED-REG-" + Math.floor(10000 + Math.random() * 90000),
+          university: "Medical University",
+          bio: "Specialist clinician.",
+        });
+        toast.success("Account created successfully!");
+        navigate("/doctor/onboarding");
       }
-    }, 1200);
+    }, 400);
   };
 
   return (
-    <div className="relative flex min-h-screen w-full flex-col justify-between overflow-hidden bg-background px-6 pb-8 pt-16">
-      {/* Decorative background grids/blobs */}
+    <div className="relative flex min-h-screen w-full flex-col justify-between overflow-hidden bg-background px-6 pb-8 pt-12">
+      {/* Decorative background blobs */}
       <div className="absolute -left-20 -top-20 h-72 w-72 rounded-full bg-primary-soft opacity-40 blur-3xl" />
       <div className="absolute -right-20 bottom-10 h-80 w-80 rounded-full bg-accent-soft opacity-30 blur-3xl" />
-      
+
       <div className="z-10 mx-auto w-full max-w-md animate-fade-up">
         {/* Brand Header */}
         <div className="text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl gradient-hero text-primary-foreground shadow-glow">
             <Stethoscope className="h-8 w-8" />
           </div>
-          <h1 className="mt-4 font-display text-3xl font-bold tracking-tight text-foreground">Palscare</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Doctor Consultation & Portal Management</p>
+          <h1 className="mt-4 font-display text-3xl font-bold tracking-tight text-foreground">PalsCare Doctor</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Clinical Portal & Chamber Management</p>
+        </div>
+
+        {/* Quick Demo Access Pill */}
+        <div className="mt-6">
+          <button
+            type="button"
+            onClick={handleQuickDemo}
+            disabled={isLoading}
+            className="group flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary-soft/60 px-4 py-3 text-xs font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground shadow-soft"
+          >
+            <Sparkles className="h-4 w-4 transition group-hover:scale-110" />
+            <span>One-Click Demo Login (Dr. Amara Patel)</span>
+          </button>
         </div>
 
         {/* Tab Selector */}
-        <div className="mt-8 flex rounded-2xl bg-secondary p-1">
+        <div className="mt-5 flex rounded-2xl bg-secondary p-1">
           <button
             type="button"
             onClick={() => {
               setIsLogin(true);
-              setEmail("");
-              setPassword("");
-              setName("");
+              setIdentifier("dr.amara.patel@palscare.com");
+              setPassword("password123");
             }}
             className={`flex-1 rounded-xl py-2.5 text-xs font-semibold transition ${
               isLogin ? "bg-card text-foreground shadow-soft" : "text-muted-foreground"
             }`}
           >
-            Log In
+            Physician Login
           </button>
           <button
             type="button"
             onClick={() => {
               setIsLogin(false);
+              setName("");
               setEmail("");
               setPassword("");
-              setName("");
             }}
             className={`flex-1 rounded-xl py-2.5 text-xs font-semibold transition ${
               !isLogin ? "bg-card text-foreground shadow-soft" : "text-muted-foreground"
             }`}
           >
-            Sign Up
+            Join Network
           </button>
         </div>
 
         {/* Card Form */}
-        <form onSubmit={handleSubmit} className="mt-6 rounded-3xl bg-card/80 p-6 shadow-elevated backdrop-blur-xl border border-border/50">
+        <form onSubmit={handleSubmit} className="mt-5 rounded-3xl bg-card/80 p-6 shadow-elevated backdrop-blur-xl border border-border/50">
           <h2 className="font-display text-xl font-semibold text-foreground">
-            {isLogin ? "Sign in as Doctor" : "Create your account"}
+            {isLogin ? "Sign in to portal" : "Register as Doctor"}
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            {isLogin ? "Enter your email and password below" : "Register a new clinical account to get started"}
+            {isLogin ? "Enter your clinical credentials" : "Create your verified doctor profile"}
           </p>
 
-          <div className="mt-6 space-y-4">
+          <div className="mt-5 space-y-3.5">
             {!isLogin && (
+              <>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-4 flex items-center text-muted-foreground">
+                    <User className="h-4 w-4" />
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Doctor Full Name (e.g. Dr. Jane Doe)"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full rounded-2xl border border-border bg-background py-3.5 pl-11 pr-4 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-4 flex items-center text-muted-foreground">
+                    <Mail className="h-4 w-4" />
+                  </span>
+                  <input
+                    type="email"
+                    placeholder="Professional Email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full rounded-2xl border border-border bg-background py-3.5 pl-11 pr-4 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-4 flex items-center text-muted-foreground">
+                    <Phone className="h-4 w-4" />
+                  </span>
+                  <input
+                    type="tel"
+                    placeholder="Contact Number"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full rounded-2xl border border-border bg-background py-3.5 pl-11 pr-4 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              </>
+            )}
+
+            {isLogin && (
               <div className="relative">
                 <span className="absolute inset-y-0 left-4 flex items-center text-muted-foreground">
-                  <User className="h-4 w-4" />
+                  <Mail className="h-4 w-4" />
                 </span>
                 <input
                   type="text"
-                  placeholder="Full Name (e.g. Sarah Smith)"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Email or Phone Number"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full rounded-2xl border border-border bg-background py-3.5 pl-11 pr-4 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
                 />
               </div>
             )}
-
-            <div className="relative">
-              <span className="absolute inset-y-0 left-4 flex items-center text-muted-foreground">
-                <Mail className="h-4 w-4" />
-              </span>
-              <input
-                type="email"
-                placeholder="Email Address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-2xl border border-border bg-background py-3.5 pl-11 pr-4 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
-              />
-            </div>
 
             <div className="relative">
               <span className="absolute inset-y-0 left-4 flex items-center text-muted-foreground">
@@ -175,24 +229,16 @@ export default function DoctorLogin() {
             {isLoading ? (
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
             ) : isLogin ? (
-              "Log In"
+              "Access Clinical Portal"
             ) : (
-              "Create Account"
+              "Start Doctor Onboarding"
             )}
           </button>
         </form>
-
-        {isLogin && (
-          <div className="mt-4 text-center">
-            <p className="text-xs text-muted-foreground">
-              Mock login details: <span className="font-semibold text-foreground">doctor@test.com</span> / <span className="font-semibold text-foreground">password123</span>
-            </p>
-          </div>
-        )}
       </div>
 
       <div className="z-10 text-center text-xs text-muted-foreground">
-        © {new Date().getFullYear()} Palscare Health. All mock rights reserved.
+        Demo Mode • Physician Workspace
       </div>
     </div>
   );
